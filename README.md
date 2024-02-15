@@ -1,4 +1,5 @@
 # Anime Episode Tracker and LINE Notifier
+![ภาพ](https://github.com/lookmhen/Anime-record/assets/29670155/42af5281-6e5e-4eca-b3b1-37b1cfcc32be)
 
 This Python-based project automates the monitoring of new anime episodes for your favorite series and sends notifications directly to your LINE Messenger when a new episode is released. It's designed for anime enthusiasts who want to stay updated without constantly checking websites for new content.
 
