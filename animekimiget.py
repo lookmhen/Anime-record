@@ -1,11 +1,12 @@
 import csv
 import os
-import time
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
 
 # Get the path of the current script
 current_directory = os.path.dirname(os.path.abspath(__file__))
@@ -15,12 +16,37 @@ urls_file_path = os.path.join(current_directory, 'urls.txt')
 csv_file_path = os.path.join(current_directory, 'previous_content.csv')
 
 
+# Create a session object
+session = requests.Session()
+
 # กำหนด token สำหรับ Line Notify
 token = os.getenv('LINE_TOKEN')
 headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/x-www-form-urlencoded'}
 
 # กำหนด user agent
-USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36'
+USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
+
+session.headers.update({
+    'User-Agent': USER_AGENT,
+    'Authorization': f'Bearer {token}',
+    'Content-Type': 'application/x-www-form-urlencoded'
+})
+
+
+
+def handle_request_exception(e):
+    """จัดการกับข้อยกเว้นที่เกิดจากคำขอ HTTP."""
+    if isinstance(e, requests.exceptions.HTTPError):
+        print(f'HTTP Error: {e}')
+    elif isinstance(e, requests.exceptions.ConnectionError):
+        print(f'Connection Error: {e}')
+    elif isinstance(e, requests.exceptions.Timeout):
+        print(f'Timeout Error: {e}')
+    elif isinstance(e, requests.exceptions.RequestException):
+        print(f'Error: {e}')
+    else:
+        print(f'Unhandled Error: {e}')
+
 
 # ฟังก์ชันสำหรับส่งการแจ้งเตือนผ่าน Line Notify
 def send_line_notification(message):
@@ -55,11 +81,7 @@ def save_previous_content(previous_content):
 
 
 def main():
-    # Get the path of the current script
-    current_directory = os.path.dirname(os.path.abspath(__file__))
-
-    # get full path file url และ เปิดไฟล์ list URL การ์ตูน
-    urls_file_path = os.path.join(current_directory, 'urls.txt')
+    
     with open(urls_file_path, 'r') as file:
         urls = file.readlines()
 
@@ -71,24 +93,30 @@ def main():
         # ตรวจสอบว่า URL ถูกทำเครื่องหมายว่า "skip" หรือไม่ ถ้ามีคือข้าม
         if url.strip().startswith('skip-'):
             continue  # ข้าม URL นี้ไป
-
+        
         # ส่งคำขอ request GET ไปยัง URL พร้อมกับ user agent
-        response = requests.get(url.strip(), headers={'User-Agent': USER_AGENT})
-
-        # ดึงเนื้อหา HTML ด้วย BeautifulSoup
-        soup = BeautifulSoup(response.content, 'html.parser')
-
-        # แยกเนื้อหาข้อความขององค์ประกอบที่มีคลาส "content" หากมี
-        content_node = soup.select_one('#single > div.content > div.dt-breadcrumb.breadcrumb_bottom > ol > li:nth-child(3) > a > span')
-        epall = soup.find_all('ul', class_='episodios')
-
+        try:
+            response = session.get(url.strip(), headers={'User-Agent': USER_AGENT})
+            response.raise_for_status()
+             # ดึงเนื้อหา HTML ด้วย BeautifulSoup
+            soup = BeautifulSoup(response.content, 'html.parser')
+            # แยกเนื้อหาข้อความขององค์ประกอบที่มีคลาส "content" หากมี
+            content_node = soup.select_one('#single > div.content > div.dt-breadcrumb.breadcrumb_bottom > ol > li:nth-child(3) > a > span')
+            epall = soup.find_all('ul', class_='episodios')
+            
+        except requests.exceptions.RequestException as e:
+            handle_request_exception(e)
+            continue  # ข้ามไปยัง URL ถัดไปหากเกิดError
+            
+            
+            
         if content_node:
             content_text = content_node.text.strip()
 
             for ep in epall:
                 selectep = ep.find_all('a', href=True)
                 if selectep:
-                    last_link = selectep[-1]
+                    last_link = selectep[-1] # ลิ้งสุดท้าย= new EP
                     lastepisode = last_link.string + '\n' + 'ลิงก์:' + last_link['href']
                 else:
                     content_text = 'ไม่เจอ'
@@ -100,6 +128,8 @@ def main():
 
             # อัปเดตเนื้อหาสำหรับ URL นี้ในพจนานุกรม
             previous_content[url.strip()] = content_text
+
+        
 
     # เรียกใช้ฟังก์ชันสำหรับบันทึกเนื้อหาล่าสุดไปยังไฟล์ CSV
     save_previous_content(previous_content)
